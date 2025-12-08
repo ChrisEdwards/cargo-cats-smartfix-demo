@@ -40,7 +40,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run Contrast AI SmartFix - Generate Fixes Action
-        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1 # Replace with the latest version
+        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@fix/separate-label-addition # Replace with the latest version
         with:
           # Contrast Configuration
           contrast_host: ${{ vars.CONTRAST_HOST }} # The host name of your Contrast SaaS instance, e.g. 'app.contrastsecurity.com'
@@ -91,7 +91,7 @@ jobs:
           fetch-depth: 0
 
       - name: Notify Contrast on PR Merge
-        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1 # Replace with the latest version
+        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@fix/separate-label-addition # Replace with the latest version
         with:
           run_task: merge
           # --- GitHub Token ---
@@ -116,7 +116,7 @@ jobs:
           fetch-depth: 0
 
       - name: Notify Contrast on PR Closed
-        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1 # Replace with the latest version
+        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@fix/separate-label-addition # Replace with the latest version
         with:
           run_task: closed
           # --- GitHub Token ---
