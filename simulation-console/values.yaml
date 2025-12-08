@@ -1,0 +1,28 @@
+# Default values for simulation-console.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+zapproxy:
+  image: ghcr.io/zaproxy/zaproxy:stable
+  name: zapproxy
+
+consoleui:
+  image: console-ui:latest
+  name: console-ui
+  contrastApiToken: "default-token"
+  contrastUniqName: "default"
+  contrastApiKey: "default-api-key"
+  contrastApiAuthorization: "default-authorization"
+
+exploitserver:
+  image: exploit-server:latest
+  name: exploit-server
+
+contrastdatacollector:
+  image: contrastdatacollector:latest
+  name: contrastdatacollector
+  contrastUniqName: "default"
+  contrastApiToken: "default-token"
+  contrastApiKey: "default-api-key"
+  contrastApiAuthorization: "default-authorization"
+

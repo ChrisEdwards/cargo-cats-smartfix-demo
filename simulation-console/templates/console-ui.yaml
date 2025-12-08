@@ -1,0 +1,116 @@
+# ---------------------------------------------
+# ServiceAccount
+# ---------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-pod-monitor
+  namespace: {{ .Release.Namespace | default "default" }}
+
+---
+# ---------------------------------------------
+# RBAC - Role
+# ---------------------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-pod-monitor-role
+  namespace: {{ .Release.Namespace | default "default" }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+
+---
+# ---------------------------------------------
+# RBAC - RoleBinding
+# ---------------------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-pod-monitor-binding
+  namespace: {{ .Release.Namespace | default "default" }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-pod-monitor
+roleRef:
+  kind: Role
+  name: {{ .Release.Name }}-pod-monitor-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# ---------------------------------------------
+# Deployment
+# ---------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .Release.Name }}-{{ .Values.consoleui.name }}"
+  namespace: {{ .Release.Namespace | default "default" }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Values.consoleui.name }}
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        rollme: {{ randAlphaNum 5 | quote }}
+      labels:
+        app: {{ .Values.consoleui.name }}
+    spec:
+      serviceAccountName: {{ .Release.Name }}-pod-monitor
+{{- if .Values.aliashost }}
+      hostAliases:
+{{- range $host, $ip := .Values.aliashost }}
+        - ip: "{{ $ip }}"
+          hostnames:
+            - "{{ $host }}"
+{{- end }}
+{{- end }}
+      containers:
+        - name: {{ .Values.consoleui.name }}
+          image: {{ .Values.consoleui.image }}
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 5000
+              name: http
+          env:
+            - name: CONTRAST__AGENT__TOKEN
+              value: {{ .Values.consoleui.contrastApiToken | default "" | quote }}
+            - name: CONTRAST__UNIQ__NAME
+              value: {{ .Values.consoleui.contrastUniqName | default "" | quote }}
+            - name: CONTRAST__API__KEY
+              value: {{ .Values.consoleui.contrastApiKey | default "" | quote }}
+            - name: CONTRAST__API__AUTHORIZATION
+              value: {{ .Values.consoleui.contrastApiAuthorization | default "" | quote }}
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+              ephemeral-storage: "1Gi"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+              ephemeral-storage: "2Gi"
+---
+# ---------------------------------------------
+# Service
+# ---------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: console-ui
+  namespace: {{ .Release.Namespace | default "default" }}
+spec:
+  selector:
+    app: {{ .Values.consoleui.name }}
+  ports:
+    - protocol: TCP
+      name: http
+      port: 5000
+      targetPort: 5000
