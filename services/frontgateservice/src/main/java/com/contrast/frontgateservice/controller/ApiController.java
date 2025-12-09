@@ -416,7 +416,40 @@ public class ApiController {
         }
     }
 
-    // --- Address Import Functionality (VULNERABLE: Untrusted Deserialization) ---
+    private ObjectInputFilter createAddressImportFilter() {
+        return filterInfo -> {
+            Class<?> clazz = filterInfo.serialClass();
+            if (clazz == null) {
+                return ObjectInputFilter.Status.UNDECIDED;
+            }
+            
+            String className = clazz.getName();
+            
+            // Allow arrays
+            if (clazz.isArray()) {
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            
+            if (className.equals("java.util.ArrayList") ||
+                className.equals("java.util.LinkedList") ||
+                className.equals("java.util.HashMap") ||
+                className.equals("java.util.LinkedHashMap") ||
+                className.equals("java.lang.String") ||
+                className.equals("java.lang.Integer") ||
+                className.equals("java.lang.Long") ||
+                className.equals("java.lang.Double") ||
+                className.equals("java.lang.Float") ||
+                className.equals("java.lang.Boolean") ||
+                className.equals("java.lang.Number") ||
+                className.equals("java.util.Date")) {
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            
+            return ObjectInputFilter.Status.REJECTED;
+        };
+    }
+
+    // --- Address Import Functionality ---
     @PostMapping("/addresses/import")
     public ResponseEntity<String> importAddresses(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
@@ -425,8 +458,8 @@ public class ApiController {
                     .body("{\"error\": \"No file provided\"}");
         }
         try {
-            // VULNERABLE: Untrusted deserialization of user-supplied file
             ObjectInputStream ois = new ObjectInputStream(file.getInputStream());
+            ois.setObjectInputFilter(createAddressImportFilter());
             Object obj = ois.readObject();
             ois.close();
             if (obj instanceof List) {
