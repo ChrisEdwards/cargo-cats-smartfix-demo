@@ -416,6 +416,28 @@ public class ApiController {
         }
     }
 
+    private ObjectInputStream createSecureObjectInputStream(InputStream inputStream) throws IOException {
+        ObjectInputStream ois = new ObjectInputStream(inputStream);
+        ois.setObjectInputFilter(info -> {
+            if (info.serialClass() == null) {
+                return ObjectInputFilter.Status.UNDECIDED;
+            }
+            String className = info.serialClass().getName();
+            if (className.equals("java.util.ArrayList") ||
+                className.equals("java.util.HashMap") ||
+                className.equals("java.util.LinkedHashMap") ||
+                className.equals("java.lang.String") ||
+                className.equals("java.lang.Long") ||
+                className.equals("java.lang.Integer") ||
+                className.equals("java.lang.Number")) {
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            logger.warn("Rejected deserialization of class: {}", className);
+            return ObjectInputFilter.Status.REJECTED;
+        });
+        return ois;
+    }
+
     // --- Address Import Functionality (VULNERABLE: Untrusted Deserialization) ---
     @PostMapping("/addresses/import")
     public ResponseEntity<String> importAddresses(@RequestParam("file") MultipartFile file) {
@@ -425,8 +447,7 @@ public class ApiController {
                     .body("{\"error\": \"No file provided\"}");
         }
         try {
-            // VULNERABLE: Untrusted deserialization of user-supplied file
-            ObjectInputStream ois = new ObjectInputStream(file.getInputStream());
+            ObjectInputStream ois = createSecureObjectInputStream(file.getInputStream());
             Object obj = ois.readObject();
             ois.close();
             if (obj instanceof List) {
