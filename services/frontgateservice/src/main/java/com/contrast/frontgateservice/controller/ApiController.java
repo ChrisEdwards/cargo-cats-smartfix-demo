@@ -416,7 +416,46 @@ public class ApiController {
         }
     }
 
-    // --- Address Import Functionality (VULNERABLE: Untrusted Deserialization) ---
+    private Object deserializeWithFilter(InputStream inputStream) throws IOException, ClassNotFoundException {
+        ObjectInputStream ois = new ObjectInputStream(inputStream);
+        ois.setObjectInputFilter(filterInfo -> {
+            Class<?> clazz = filterInfo.serialClass();
+            if (clazz == null) {
+                return ObjectInputFilter.Status.UNDECIDED;
+            }
+            
+            if (clazz.isArray()) {
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            
+            String className = clazz.getName();
+            if (className.equals("java.util.ArrayList") ||
+                className.equals("java.util.LinkedList") ||
+                className.equals("java.util.HashMap") ||
+                className.equals("java.util.LinkedHashMap") ||
+                className.equals("java.lang.String") ||
+                className.equals("java.lang.Integer") ||
+                className.equals("java.lang.Long") ||
+                className.equals("java.lang.Double") ||
+                className.equals("java.lang.Float") ||
+                className.equals("java.lang.Boolean") ||
+                className.equals("java.lang.Number")) {
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            
+            logger.warn("Rejected deserialization of class: {}", className);
+            return ObjectInputFilter.Status.REJECTED;
+        });
+        
+        try {
+            Object obj = ois.readObject();
+            return obj;
+        } finally {
+            ois.close();
+        }
+    }
+
+    // --- Address Import Functionality ---
     @PostMapping("/addresses/import")
     public ResponseEntity<String> importAddresses(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
@@ -425,10 +464,7 @@ public class ApiController {
                     .body("{\"error\": \"No file provided\"}");
         }
         try {
-            // VULNERABLE: Untrusted deserialization of user-supplied file
-            ObjectInputStream ois = new ObjectInputStream(file.getInputStream());
-            Object obj = ois.readObject();
-            ois.close();
+            Object obj = deserializeWithFilter(file.getInputStream());
             if (obj instanceof List) {
                 List<?> addresses = (List<?>) obj;
                 // Get the current authenticated user
