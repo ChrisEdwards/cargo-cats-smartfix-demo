@@ -266,6 +266,35 @@ public class ApiController {
         }
     }
 
+    private ObjectInputFilter createAddressImportFilter() {
+        return filterInfo -> {
+            Class<?> clazz = filterInfo.serialClass();
+            if (clazz == null) {
+                return ObjectInputFilter.Status.UNDECIDED;
+            }
+            // Allow classes from java.util package (collections and their internal classes)
+            String className = clazz.getName();
+            if (className.startsWith("java.util.")) {
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            // Allow primitive types and their wrappers from java.lang
+            if (clazz.isPrimitive() ||
+                className.startsWith("java.lang.")) {
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            // Allow arrays of allowed types
+            if (clazz.isArray()) {
+                Class<?> componentType = clazz.getComponentType();
+                if (componentType.isPrimitive() ||
+                    componentType.getName().startsWith("java.lang.") ||
+                    componentType.getName().startsWith("java.util.")) {
+                    return ObjectInputFilter.Status.ALLOWED;
+                }
+            }
+            return ObjectInputFilter.Status.REJECTED;
+        };
+    }
+
     @GetMapping("/shipments")
     public ResponseEntity<String> getMyShipments() {
         // Get the current authenticated user
@@ -416,7 +445,6 @@ public class ApiController {
         }
     }
 
-    // --- Address Import Functionality (VULNERABLE: Untrusted Deserialization) ---
     @PostMapping("/addresses/import")
     public ResponseEntity<String> importAddresses(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
@@ -425,8 +453,8 @@ public class ApiController {
                     .body("{\"error\": \"No file provided\"}");
         }
         try {
-            // VULNERABLE: Untrusted deserialization of user-supplied file
             ObjectInputStream ois = new ObjectInputStream(file.getInputStream());
+            ois.setObjectInputFilter(createAddressImportFilter());
             Object obj = ois.readObject();
             ois.close();
             if (obj instanceof List) {
