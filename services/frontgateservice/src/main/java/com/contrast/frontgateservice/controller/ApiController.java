@@ -266,6 +266,38 @@ public class ApiController {
         }
     }
 
+    private ObjectInputFilter createAddressImportFilter() {
+        return filterInfo -> {
+            Class<?> clazz = filterInfo.serialClass();
+            if (clazz == null) {
+                return ObjectInputFilter.Status.UNDECIDED;
+            }
+            // Allow safe collection and primitive wrapper classes
+            if (clazz == java.util.ArrayList.class ||
+                clazz == java.util.HashMap.class ||
+                clazz == java.util.LinkedHashMap.class ||
+                clazz == java.lang.String.class ||
+                clazz == java.lang.Integer.class ||
+                clazz == java.lang.Long.class ||
+                clazz == java.lang.Double.class ||
+                clazz == java.lang.Boolean.class ||
+                clazz == java.lang.Number.class ||
+                clazz.isArray()) {
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            // Allow internal JDK collection classes needed for HashMap/LinkedHashMap deserialization
+            String className = clazz.getName();
+            if (className.startsWith("java.util.HashMap$") ||
+                className.startsWith("java.util.LinkedHashMap$") ||
+                className.equals("java.util.Collections$UnmodifiableMap") ||
+                className.equals("java.util.Collections$UnmodifiableCollection") ||
+                className.equals("java.util.Collections$UnmodifiableList")) {
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            return ObjectInputFilter.Status.REJECTED;
+        };
+    }
+
     @GetMapping("/shipments")
     public ResponseEntity<String> getMyShipments() {
         // Get the current authenticated user
@@ -416,7 +448,6 @@ public class ApiController {
         }
     }
 
-    // --- Address Import Functionality (VULNERABLE: Untrusted Deserialization) ---
     @PostMapping("/addresses/import")
     public ResponseEntity<String> importAddresses(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
@@ -425,8 +456,8 @@ public class ApiController {
                     .body("{\"error\": \"No file provided\"}");
         }
         try {
-            // VULNERABLE: Untrusted deserialization of user-supplied file
             ObjectInputStream ois = new ObjectInputStream(file.getInputStream());
+            ois.setObjectInputFilter(createAddressImportFilter());
             Object obj = ois.readObject();
             ois.close();
             if (obj instanceof List) {
