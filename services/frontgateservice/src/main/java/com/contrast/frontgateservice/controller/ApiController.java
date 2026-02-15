@@ -416,7 +416,6 @@ public class ApiController {
         }
     }
 
-    // --- Address Import Functionality (VULNERABLE: Untrusted Deserialization) ---
     @PostMapping("/addresses/import")
     public ResponseEntity<String> importAddresses(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
@@ -425,8 +424,8 @@ public class ApiController {
                     .body("{\"error\": \"No file provided\"}");
         }
         try {
-            // VULNERABLE: Untrusted deserialization of user-supplied file
             ObjectInputStream ois = new ObjectInputStream(file.getInputStream());
+            ois.setObjectInputFilter(createAddressImportFilter());
             Object obj = ois.readObject();
             ois.close();
             if (obj instanceof List) {
@@ -796,5 +795,58 @@ public class ApiController {
         return ResponseEntity.status(500)
                 .contentType(org.springframework.http.MediaType.TEXT_HTML)
                 .body("<div class=\"alert alert-danger\">An error occurred: " + e.getMessage() + "</div>");
+    }
+
+    private ObjectInputFilter createAddressImportFilter() {
+        return filterInfo -> {
+            Class<?> clazz = filterInfo.serialClass();
+            if (clazz == null) {
+                return ObjectInputFilter.Status.UNDECIDED;
+            }
+            // Allow arrays (needed for HashMap internal storage)
+            if (clazz.isArray()) {
+                Class<?> componentType = clazz.getComponentType();
+                // Allow arrays of Object and primitive types
+                if (componentType == Object.class || componentType.isPrimitive()) {
+                    return ObjectInputFilter.Status.ALLOWED;
+                }
+                // Allow arrays of allowed types
+                String compName = componentType.getName();
+                if (compName.startsWith("java.lang.") || compName.startsWith("java.util.")) {
+                    return ObjectInputFilter.Status.ALLOWED;
+                }
+            }
+            String className = clazz.getName();
+            // Allow safe java.lang classes (String, Integer, Long, etc.)
+            if (className.startsWith("java.lang.")) {
+                // Block dangerous classes like ProcessBuilder, Runtime
+                if (className.equals("java.lang.ProcessBuilder") ||
+                    className.equals("java.lang.Runtime") ||
+                    className.equals("java.lang.Class")) {
+                    return ObjectInputFilter.Status.REJECTED;
+                }
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            // Allow safe collection classes from java.util
+            if (clazz == java.util.ArrayList.class ||
+                clazz == java.util.LinkedList.class ||
+                clazz == java.util.HashMap.class ||
+                clazz == java.util.LinkedHashMap.class ||
+                clazz == java.util.HashSet.class ||
+                clazz == java.util.TreeMap.class ||
+                clazz == java.util.TreeSet.class) {
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            // Allow internal classes needed for HashMap/LinkedHashMap/Collections serialization
+            if (className.startsWith("java.util.HashMap$") ||
+                className.startsWith("java.util.LinkedHashMap$") ||
+                className.startsWith("java.util.HashSet$") ||
+                className.startsWith("java.util.TreeMap$") ||
+                className.startsWith("java.util.Collections$") ||
+                className.startsWith("java.util.ImmutableCollections$")) {
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            return ObjectInputFilter.Status.REJECTED;
+        };
     }
 }
