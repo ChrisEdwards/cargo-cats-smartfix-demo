@@ -416,7 +416,6 @@ public class ApiController {
         }
     }
 
-    // --- Address Import Functionality (VULNERABLE: Untrusted Deserialization) ---
     @PostMapping("/addresses/import")
     public ResponseEntity<String> importAddresses(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
@@ -425,8 +424,7 @@ public class ApiController {
                     .body("{\"error\": \"No file provided\"}");
         }
         try {
-            // VULNERABLE: Untrusted deserialization of user-supplied file
-            ObjectInputStream ois = new ObjectInputStream(file.getInputStream());
+            ObjectInputStream ois = createFilteredObjectInputStream(file.getInputStream());
             Object obj = ois.readObject();
             ois.close();
             if (obj instanceof List) {
@@ -796,5 +794,33 @@ public class ApiController {
         return ResponseEntity.status(500)
                 .contentType(org.springframework.http.MediaType.TEXT_HTML)
                 .body("<div class=\"alert alert-danger\">An error occurred: " + e.getMessage() + "</div>");
+    }
+
+    private ObjectInputStream createFilteredObjectInputStream(InputStream inputStream) throws IOException {
+        ObjectInputStream ois = new ObjectInputStream(inputStream);
+        ois.setObjectInputFilter(createDeserializationFilter());
+        return ois;
+    }
+
+    private ObjectInputFilter createDeserializationFilter() {
+        return filterInfo -> {
+            Class<?> clazz = filterInfo.serialClass();
+            if (clazz == null) {
+                return ObjectInputFilter.Status.UNDECIDED;
+            }
+            if (clazz.isArray()) {
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            if (java.util.ArrayList.class.equals(clazz) ||
+                java.util.LinkedList.class.equals(clazz) ||
+                java.util.HashMap.class.equals(clazz) ||
+                java.util.LinkedHashMap.class.equals(clazz) ||
+                java.lang.String.class.equals(clazz) ||
+                java.lang.Number.class.isAssignableFrom(clazz) ||
+                java.lang.Boolean.class.equals(clazz)) {
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            return ObjectInputFilter.Status.REJECTED;
+        };
     }
 }
