@@ -416,7 +416,6 @@ public class ApiController {
         }
     }
 
-    // --- Address Import Functionality (VULNERABLE: Untrusted Deserialization) ---
     @PostMapping("/addresses/import")
     public ResponseEntity<String> importAddresses(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
@@ -425,8 +424,8 @@ public class ApiController {
                     .body("{\"error\": \"No file provided\"}");
         }
         try {
-            // VULNERABLE: Untrusted deserialization of user-supplied file
             ObjectInputStream ois = new ObjectInputStream(file.getInputStream());
+            ois.setObjectInputFilter(createAddressImportFilter());
             Object obj = ois.readObject();
             ois.close();
             if (obj instanceof List) {
@@ -796,5 +795,36 @@ public class ApiController {
         return ResponseEntity.status(500)
                 .contentType(org.springframework.http.MediaType.TEXT_HTML)
                 .body("<div class=\"alert alert-danger\">An error occurred: " + e.getMessage() + "</div>");
+    }
+
+    private ObjectInputFilter createAddressImportFilter() {
+        return filterInfo -> {
+            Class<?> clazz = filterInfo.serialClass();
+            if (clazz == null) {
+                return ObjectInputFilter.Status.UNDECIDED;
+            }
+            // Allow arrays (needed for HashMap/ArrayList internal storage)
+            if (clazz.isArray()) {
+                Class<?> componentType = clazz.getComponentType();
+                // Allow arrays of Object (used by HashMap/ArrayList), primitive arrays,
+                // and arrays of allowed internal node types
+                if (componentType == Object.class || componentType.isPrimitive()) {
+                    return ObjectInputFilter.Status.ALLOWED;
+                }
+                // Allow arrays of java.util and java.lang classes
+                String componentName = componentType.getName();
+                if (componentName.startsWith("java.util.") ||
+                    componentName.startsWith("java.lang.")) {
+                    return ObjectInputFilter.Status.ALLOWED;
+                }
+            }
+            // Allow safe java.util and java.lang classes (collections, primitives, etc.)
+            String className = clazz.getName();
+            if (className.startsWith("java.util.") ||
+                className.startsWith("java.lang.")) {
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            return ObjectInputFilter.Status.REJECTED;
+        };
     }
 }
