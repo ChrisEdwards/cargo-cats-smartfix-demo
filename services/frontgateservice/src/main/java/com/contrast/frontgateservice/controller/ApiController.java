@@ -416,7 +416,6 @@ public class ApiController {
         }
     }
 
-    // --- Address Import Functionality (VULNERABLE: Untrusted Deserialization) ---
     @PostMapping("/addresses/import")
     public ResponseEntity<String> importAddresses(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
@@ -425,8 +424,8 @@ public class ApiController {
                     .body("{\"error\": \"No file provided\"}");
         }
         try {
-            // VULNERABLE: Untrusted deserialization of user-supplied file
             ObjectInputStream ois = new ObjectInputStream(file.getInputStream());
+            ois.setObjectInputFilter(createAddressImportFilter());
             Object obj = ois.readObject();
             ois.close();
             if (obj instanceof List) {
@@ -796,5 +795,42 @@ public class ApiController {
         return ResponseEntity.status(500)
                 .contentType(org.springframework.http.MediaType.TEXT_HTML)
                 .body("<div class=\"alert alert-danger\">An error occurred: " + e.getMessage() + "</div>");
+    }
+
+    private static ObjectInputFilter createAddressImportFilter() {
+        return filterInfo -> {
+            Class<?> clazz = filterInfo.serialClass();
+            if (clazz == null) {
+                return ObjectInputFilter.Status.UNDECIDED;
+            }
+            String className = clazz.getName();
+            // Allow safe java.util collection classes and their internal classes
+            if (className.startsWith("java.util.")) {
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            // Allow safe java.lang classes (primitives wrappers, String, Number, etc.)
+            if (className.startsWith("java.lang.")) {
+                // Block dangerous java.lang classes
+                if (className.equals("java.lang.Runtime") ||
+                    className.equals("java.lang.ProcessBuilder") ||
+                    className.equals("java.lang.Process") ||
+                    className.equals("java.lang.ClassLoader") ||
+                    className.contains("Invoke")) {
+                    return ObjectInputFilter.Status.REJECTED;
+                }
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            // Allow array types for primitives and safe classes
+            if (clazz.isArray()) {
+                Class<?> componentType = clazz.getComponentType();
+                String componentName = componentType.getName();
+                if (componentType.isPrimitive() ||
+                    componentName.startsWith("java.lang.") ||
+                    componentName.startsWith("java.util.")) {
+                    return ObjectInputFilter.Status.ALLOWED;
+                }
+            }
+            return ObjectInputFilter.Status.REJECTED;
+        };
     }
 }
