@@ -416,7 +416,6 @@ public class ApiController {
         }
     }
 
-    // --- Address Import Functionality (VULNERABLE: Untrusted Deserialization) ---
     @PostMapping("/addresses/import")
     public ResponseEntity<String> importAddresses(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
@@ -425,8 +424,8 @@ public class ApiController {
                     .body("{\"error\": \"No file provided\"}");
         }
         try {
-            // VULNERABLE: Untrusted deserialization of user-supplied file
             ObjectInputStream ois = new ObjectInputStream(file.getInputStream());
+            ois.setObjectInputFilter(createAddressImportFilter());
             Object obj = ois.readObject();
             ois.close();
             if (obj instanceof List) {
@@ -796,5 +795,50 @@ public class ApiController {
         return ResponseEntity.status(500)
                 .contentType(org.springframework.http.MediaType.TEXT_HTML)
                 .body("<div class=\"alert alert-danger\">An error occurred: " + e.getMessage() + "</div>");
+    }
+
+    private ObjectInputFilter createAddressImportFilter() {
+        return filterInfo -> {
+            Class<?> clazz = filterInfo.serialClass();
+            if (clazz == null) {
+                return ObjectInputFilter.Status.UNDECIDED;
+            }
+            // Allow safe collection classes and primitives
+            if (clazz == java.util.ArrayList.class ||
+                clazz == java.util.LinkedList.class ||
+                clazz == java.util.HashMap.class ||
+                clazz == java.util.LinkedHashMap.class ||
+                clazz == String.class ||
+                clazz == Integer.class ||
+                clazz == Long.class ||
+                clazz == Double.class ||
+                clazz == Boolean.class ||
+                clazz == Number.class) {
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            // Allow array types needed for collection deserialization
+            if (clazz.isArray()) {
+                Class<?> componentType = clazz.getComponentType();
+                // Allow arrays of safe types and also arrays of Map.Entry for HashMap
+                if (componentType == Object.class ||
+                    componentType == String.class ||
+                    componentType == Integer.class ||
+                    componentType == Long.class ||
+                    componentType == Double.class ||
+                    componentType == Boolean.class ||
+                    java.util.Map.Entry.class.isAssignableFrom(componentType)) {
+                    return ObjectInputFilter.Status.ALLOWED;
+                }
+            }
+            // Allow internal HashMap/LinkedHashMap node classes and Map.Entry
+            String className = clazz.getName();
+            if (className.startsWith("java.util.HashMap$") ||
+                className.startsWith("java.util.LinkedHashMap$") ||
+                className.equals("java.util.Map$Entry") ||
+                java.util.Map.Entry.class.isAssignableFrom(clazz)) {
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            return ObjectInputFilter.Status.REJECTED;
+        };
     }
 }
