@@ -272,8 +272,6 @@ public class ApiController {
             if (clazz == null) {
                 return ObjectInputFilter.Status.UNDECIDED;
             }
-            // Allow safe collection and primitive types for address import
-            // Also allow internal classes from java.util, java.lang, and java.io packages
             String className = clazz.getName();
             if (className.startsWith("java.util.") ||
                 className.startsWith("java.lang.") ||
@@ -284,6 +282,14 @@ public class ApiController {
                 return ObjectInputFilter.Status.ALLOWED;
             }
             return ObjectInputFilter.Status.REJECTED;
+        };
+    }
+
+    private ObjectInputStream createFilteredObjectInputStream(InputStream inputStream) throws IOException {
+        return new ObjectInputStream(inputStream) {
+            {
+                setObjectInputFilter(createAddressImportFilter());
+            }
         };
     }
 
@@ -445,8 +451,7 @@ public class ApiController {
                     .body("{\"error\": \"No file provided\"}");
         }
         try {
-            ObjectInputStream ois = new ObjectInputStream(file.getInputStream());
-            ois.setObjectInputFilter(createAddressImportFilter());
+            ObjectInputStream ois = createFilteredObjectInputStream(file.getInputStream());
             Object obj = ois.readObject();
             ois.close();
             if (obj instanceof List) {
