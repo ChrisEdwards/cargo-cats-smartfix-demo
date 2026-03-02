@@ -266,25 +266,6 @@ public class ApiController {
         }
     }
 
-    private ObjectInputFilter createAddressImportFilter() {
-        return filterInfo -> {
-            Class<?> clazz = filterInfo.serialClass();
-            if (clazz == null) {
-                return ObjectInputFilter.Status.UNDECIDED;
-            }
-            if (java.util.ArrayList.class.isAssignableFrom(clazz) ||
-                java.util.LinkedList.class.isAssignableFrom(clazz) ||
-                java.util.HashMap.class.isAssignableFrom(clazz) ||
-                java.util.LinkedHashMap.class.isAssignableFrom(clazz) ||
-                java.lang.String.class.isAssignableFrom(clazz) ||
-                java.lang.Number.class.isAssignableFrom(clazz) ||
-                java.lang.Boolean.class.isAssignableFrom(clazz)) {
-                return ObjectInputFilter.Status.ALLOWED;
-            }
-            return ObjectInputFilter.Status.REJECTED;
-        };
-    }
-
     @GetMapping("/shipments")
     public ResponseEntity<String> getMyShipments() {
         // Get the current authenticated user
@@ -435,6 +416,7 @@ public class ApiController {
         }
     }
 
+    // --- Address Import Functionality (VULNERABLE: Untrusted Deserialization) ---
     @PostMapping("/addresses/import")
     public ResponseEntity<String> importAddresses(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
@@ -443,8 +425,8 @@ public class ApiController {
                     .body("{\"error\": \"No file provided\"}");
         }
         try {
+            // VULNERABLE: Untrusted deserialization of user-supplied file
             ObjectInputStream ois = new ObjectInputStream(file.getInputStream());
-            ois.setObjectInputFilter(createAddressImportFilter());
             Object obj = ois.readObject();
             ois.close();
             if (obj instanceof List) {
