@@ -416,6 +416,7 @@ public class ApiController {
         }
     }
 
+    // --- Address Import Functionality (VULNERABLE: Untrusted Deserialization) ---
     @PostMapping("/addresses/import")
     public ResponseEntity<String> importAddresses(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
@@ -424,8 +425,8 @@ public class ApiController {
                     .body("{\"error\": \"No file provided\"}");
         }
         try {
+            // VULNERABLE: Untrusted deserialization of user-supplied file
             ObjectInputStream ois = new ObjectInputStream(file.getInputStream());
-            ois.setObjectInputFilter(createAddressImportFilter());
             Object obj = ois.readObject();
             ois.close();
             if (obj instanceof List) {
@@ -795,28 +796,5 @@ public class ApiController {
         return ResponseEntity.status(500)
                 .contentType(org.springframework.http.MediaType.TEXT_HTML)
                 .body("<div class=\"alert alert-danger\">An error occurred: " + e.getMessage() + "</div>");
-    }
-
-    private static ObjectInputFilter createAddressImportFilter() {
-        return filterInfo -> {
-            Class<?> clazz = filterInfo.serialClass();
-            if (clazz == null) {
-                return ObjectInputFilter.Status.UNDECIDED;
-            }
-            // Allow safe collection and primitive wrapper classes
-            if (clazz == java.util.ArrayList.class ||
-                clazz == java.util.HashMap.class ||
-                clazz == java.util.LinkedHashMap.class ||
-                clazz == String.class ||
-                clazz == Number.class ||
-                clazz == Integer.class ||
-                clazz == Long.class ||
-                clazz == Double.class ||
-                clazz == Boolean.class ||
-                clazz.isArray()) {
-                return ObjectInputFilter.Status.ALLOWED;
-            }
-            return ObjectInputFilter.Status.REJECTED;
-        };
     }
 }
