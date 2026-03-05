@@ -424,8 +424,7 @@ public class ApiController {
                     .body("{\"error\": \"No file provided\"}");
         }
         try {
-            ObjectInputStream ois = new ObjectInputStream(file.getInputStream());
-            ois.setObjectInputFilter(createAddressImportFilter());
+            ObjectInputStream ois = createFilteredObjectInputStream(file.getInputStream());
             Object obj = ois.readObject();
             ois.close();
             if (obj instanceof List) {
@@ -786,6 +785,15 @@ public class ApiController {
                     .contentType(MediaType.APPLICATION_JSON)
                     .body("{\"error\": \"Failed to retrieve cat fact: " + e.getMessage() + "\"}");
         }
+    }
+
+    private static ObjectInputStream createFilteredObjectInputStream(InputStream inputStream) throws IOException {
+        ObjectInputStream ois = new ObjectInputStream(inputStream) {
+            {
+                setObjectInputFilter(createAddressImportFilter());
+            }
+        };
+        return ois;
     }
 
     private static ObjectInputFilter createAddressImportFilter() {
