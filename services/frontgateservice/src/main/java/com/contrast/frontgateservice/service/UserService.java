@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.crypto.password.MessageDigestPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -16,14 +16,11 @@ public class UserService {
 
     @Autowired
     private DataServiceProxy dataServiceProxy;
-    
-    // INSECURE: Using MD5 for educational purposes to demonstrate weak password storage
-    // MD5 is cryptographically broken and should NEVER be used in production
-    @SuppressWarnings("deprecation") // Intentionally using deprecated MD5 for educational demo
-    private final MessageDigestPasswordEncoder passwordEncoder = new MessageDigestPasswordEncoder("MD5");
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @SuppressWarnings("deprecation") // Intentionally using deprecated MD5 for educational demo
     public User createUser(String username, String password) throws Exception {
         // Check if user already exists
         if (userExists(username)) {
