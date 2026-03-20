@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.HtmlUtils;
 
 import java.util.Collections;
 import java.util.Map;
@@ -196,7 +197,7 @@ public class ApiController {
                         "<i class=\"fas fa-times-circle me-2\"></i>" +
                         "Tracking ID \"%s\" not found. Please check the ID and try again." +
                     "</div>",
-                    trackingId
+                    sanitizeForHtml(trackingId)
                 );
                 
                 logger.trace("Generated HTML: {}", notFoundHtml);
@@ -215,7 +216,7 @@ public class ApiController {
                         "<i class=\"fas fa-exclamation-triangle me-2\"></i>" +
                         "Unable to track shipment \"%s\" at this time. Please try again later." +
                     "</div>",
-                    trackingId
+                    sanitizeForHtml(trackingId)
                 );
                 
                 logger.trace("Generated error HTML: {}", errorHtml);
@@ -233,7 +234,7 @@ public class ApiController {
                     "<i class=\"fas fa-exclamation-triangle me-2\"></i>" +
                     "Unable to track shipment \"%s\" at this time. Please try again later." +
                 "</div>",
-                trackingId
+                sanitizeForHtml(trackingId)
             );
             
             logger.trace("Generated service error HTML: {}", errorHtml);
@@ -244,6 +245,13 @@ public class ApiController {
         }
     }
     
+    private String sanitizeForHtml(String input) {
+        if (input == null) {
+            return null;
+        }
+        return HtmlUtils.htmlEscape(input);
+    }
+
     private static ObjectInputFilter createAddressImportFilter() {
         return filterInfo -> {
             Class<?> clazz = filterInfo.serialClass();

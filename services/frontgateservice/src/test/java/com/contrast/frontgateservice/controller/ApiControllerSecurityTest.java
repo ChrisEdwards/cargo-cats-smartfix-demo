@@ -30,10 +30,13 @@ import java.util.List;
 import java.util.Map;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -118,6 +121,33 @@ class ApiControllerSecurityTest {
         mockMvc.perform(multipart("/api/addresses/import").file(file))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("saved")));
+    }
+
+    @Test
+    void trackShipment_xssPayloadIsEscapedInNotFoundResponse() throws Exception {
+        String xssPayload = "<script>alert('xss')</script>";
+        String emptyShipmentsJson = "{\"_embedded\":{\"shipments\":[]}}";
+
+        when(dataServiceProxy.getShipmentByTrackingId(eq(xssPayload)))
+                .thenReturn(ResponseEntity.ok(emptyShipmentsJson));
+
+        mockMvc.perform(get("/api/shipments/track").param("trackingId", xssPayload))
+                .andExpect(status().isNotFound())
+                .andExpect(content().string(not(containsString("<script>"))))
+                .andExpect(content().string(containsString("&lt;script&gt;")));
+    }
+
+    @Test
+    void trackShipment_safeTrackingIdIsPreservedInNotFoundResponse() throws Exception {
+        String safeTrackingId = "TRACK-12345";
+        String emptyShipmentsJson = "{\"_embedded\":{\"shipments\":[]}}";
+
+        when(dataServiceProxy.getShipmentByTrackingId(eq(safeTrackingId)))
+                .thenReturn(ResponseEntity.ok(emptyShipmentsJson));
+
+        mockMvc.perform(get("/api/shipments/track").param("trackingId", safeTrackingId))
+                .andExpect(status().isNotFound())
+                .andExpect(content().string(containsString("TRACK-12345")));
     }
 
     static class MaliciousPayload implements java.io.Serializable {
