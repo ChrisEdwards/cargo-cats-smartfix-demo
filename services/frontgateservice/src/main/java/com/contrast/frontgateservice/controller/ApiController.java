@@ -31,6 +31,7 @@ import java.util.List;
 import java.io.*;
 import javax.servlet.http.HttpServletResponse;
 import org.springframework.web.multipart.MultipartFile;
+import java.io.ObjectInputFilter;
 
 @RestController
 @RequestMapping("/api")
@@ -416,7 +417,6 @@ public class ApiController {
         }
     }
 
-    // --- Address Import Functionality (VULNERABLE: Untrusted Deserialization) ---
     @PostMapping("/addresses/import")
     public ResponseEntity<String> importAddresses(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
@@ -425,8 +425,8 @@ public class ApiController {
                     .body("{\"error\": \"No file provided\"}");
         }
         try {
-            // VULNERABLE: Untrusted deserialization of user-supplied file
             ObjectInputStream ois = new ObjectInputStream(file.getInputStream());
+            ois.setObjectInputFilter(createAddressImportFilter());
             Object obj = ois.readObject();
             ois.close();
             if (obj instanceof List) {
@@ -787,6 +787,25 @@ public class ApiController {
                     .contentType(MediaType.APPLICATION_JSON)
                     .body("{\"error\": \"Failed to retrieve cat fact: " + e.getMessage() + "\"}");
         }
+    }
+
+    private ObjectInputFilter createAddressImportFilter() {
+        return filterInfo -> {
+            Class<?> clazz = filterInfo.serialClass();
+            if (clazz == null) {
+                return ObjectInputFilter.Status.UNDECIDED;
+            }
+            if (clazz.isArray()
+                    || java.util.List.class.isAssignableFrom(clazz)
+                    || java.util.Map.class.isAssignableFrom(clazz)
+                    || java.util.Set.class.isAssignableFrom(clazz)
+                    || String.class.isAssignableFrom(clazz)
+                    || Number.class.isAssignableFrom(clazz)
+                    || Boolean.class.isAssignableFrom(clazz)) {
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+            return ObjectInputFilter.Status.REJECTED;
+        };
     }
 
     @ExceptionHandler(Exception.class)
